@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 hex = "0.3.2"
+nom = "5.0.0"

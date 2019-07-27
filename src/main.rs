@@ -1,6 +1,8 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::{fmt::Write, num::ParseIntError};
+use std::sync::Arc;
+use std::cell;
 
 extern crate nom;
 use nom::{HexDisplay,IResult,Needed,Offset};
@@ -11,72 +13,326 @@ use nom::{HexDisplay,IResult,Needed,Offset};
 fn main() {
     println!("Hello, world!");
 
-    let mut memory: Vec<u8> = Vec::with_capacity(4096);
-
-    let mut register: Vec<u8> = Vec::with_capacity(16);
-
-    let mut sound_register: u8 = 0;
-
-    let mut delay_register: u8 = 0;
-
-    let mut pc: usize = 0;
-
-    let mut stack_pointer: u8 = 0;
-
-    let mut stack: Vec<u16> = Vec::with_capacity(16);
-
     let filename = r"roms/Fishie.ch8";
+    let mut rom_file = File::open(filename).unwrap();
+    let mut binary = Vec::new();
+    let mut length = rom_file.read_to_end(&mut binary).unwrap();
 
-    let mut file = File::open(filename).unwrap();
-    //let reader = BufReader::new(file);
+    let mut count = 100;    //let hex_e = decode_hex("e0").unwrap();
+    //let hex_d = decode_hex("d0").unwrap();
+    //println!("{:?}", hex_d);
+    
+    let mut cpu = CPU::new(binary);
 
-    // read into a String, so that you don't need to do the conversion.
-    let mut buffer = Vec::new();
-    let length = file.read_to_end(&mut buffer).unwrap();
-
-
-    let hex_e = decode_hex("e0").unwrap();
-
-    while pc < length  {
-        let first = buffer[pc];
-        let second = buffer[pc+1];
-        let third = buffer[pc+2];
-        let fourth = buffer[pc+3];
+    loop {
 
 
-        println!("{:x},{:x}",first,second);
-        println!("{:x},{:x}",third,fourth);
+        //let instr = cpu.fetch_opcode().unwrap();
+        cpu.parse_instruction();
+        //state.cpu_cycle(opcode);
 
-        match (first, second, third, fourth){
-            (0,0,_,0) => {
-                println!("CLS")
-            }
-            (0,0,_,hex_e) => {
-                println!("RTS")
-            }
-            (3,_,_,_) => {
-                println!("SKIP.EQ")
-            }
-            _ => {
-                println!("Everything else")
-            }
-            
-
+        count +=1;
+        if count >= length {
+            break
         }
+    }
 
-        pc +=2
+}
+
+struct CPU {
+    memory: Vec<u8>,
+    register: Vec<u8>,
+    sound_register: u8,
+    delay_register: u8,
+    pc: usize,
+    sp: u8,
+    stack: Vec<u8>,
+    i: u8,
+    //display: Display,
+    //sound: Sound,
+    //keyboard: Keyboard,
+}
+
+
+impl CPU {
+
+    fn new(binary: Vec<u8>) -> CPU {
+
+    let mut memory: Vec<u8> = Vec::with_capacity(4096);
+    let memory = binary.iter().enumerate().map(move|(i,x)| if i == 500 {0} else {*x}).collect();
+
+    println!("{:?}", memory);
+
+    let mut register = Vec::with_capacity(16);
+    for nr in 1..16 {
+        register.push(nr);
+    };
+    let mut stack = Vec::with_capacity(16);
+
+    for nr in 1..16 {
+        stack.push(nr);
+    }
+
+
+    CPU {
+            memory : memory,
+            register : register,
+            sound_register : 0,
+            delay_register : 0,
+            pc : 0,
+            sp : 0,
+            stack : stack,
+            i : 0,
+        }
+    }
+    
+    fn fetch_opcode<'a>(self: Self) -> Option< Vec<u8>> {
+        println!("Fetching opcode..");
+
+        let nibble1 = (self.memory[self.pc] & 0x00F0) >> 4;
+        let nibble2 = self.memory[self.pc] & 0x000F; 
+        let nibble3 = (self.memory[self.pc+1] & 0x00F0) >> 4;
+        let nibble4 = self.memory[self.pc+1] & 0x000F;
+
+        let mut content = Vec::new();
+        content.push(nibble1);
+        content.push(nibble2);
+        content.push(nibble3);
+        content.push(nibble4);
+
+        return Some(content)
+    }
+
+    fn cpu_cycle(self) {
+        // 60times a second, grab an opcode and execute the comment
+
+        // process_opcode()
     }
 
 
 
-    //for line in reader.lines() {
-    //    let bytes = line.unwrap();
-    //    println!("{}",bytes);
-    //};
+    fn parse_instruction(&mut self) {
 
+        //let nibble1 = (self.memory[self.pc] & 0x00F0) >> 4;
+        //let nibble2 = self.memory[self.pc] & 0x000F; 
+
+        let left: u16 = self.memory[self.pc].clone().into();
+        let right: u16 = self.memory[self.pc + 1].clone().into();
+        println!("{:x}", left);
+        println!("{:x}", right);
+
+        let opcode: u16 = left | right;
+
+        println!("First nibble.. {:x}", opcode & 0xF000);
+        println!("Parsing.. {:x}",opcode);
+
+        let mut instr = Vec::new();
+        instr.push(1);
+        instr.push(2);
+        instr.push(3);
+        instr.push(4);
+
+        
+        match instr[0] {
+            0 => {
+                match instr[3] {
+                    0 => {
+                        println!("Clear screen")
+                    }
+                    _ => {
+                        println!("Returns from a subroutine")
+                    }
+                }
+            }
+
+            1 => {
+                println!("JUMP NNN");
+                let target: u8 = instr.iter().skip(1).sum();
+                self.pc = target as usize;
+            }
+
+            2 => {
+                println!("Calls subroutine at NNN")
+            }
+
+            3 => {
+                if self.register[instr[1] as usize] == instr.iter().skip(2).sum() {
+                    println!("SKIP.EQ");
+                    self.pc += 2;
+                }
+                else {
+                    println!("NOT SKIP.EQ")
+                }               
+            }
+            
+            4 => {
+                if self.register[instr[1] as usize] != instr.iter().skip(2).sum() {
+                    println!("SKIP.NE");
+                    self.pc += 2;
+                }
+                else {
+                    println!("NOT SKIP.NE")
+                }
+            }
+
+            5 => {
+                if self.register[instr[1] as usize] == self.register[instr[2] as usize] {
+                    println!("SKIP.EQ");
+                    self.pc += 2;
+                }
+                else {
+                    println!("NOT SKIP.EQ")
+                } 
+            }
+            
+            6 => {
+                self.register[instr[1] as usize] = instr.iter().skip(2).sum();
+                println!("MVI.");
+            }
+
+            7 => {
+                let count = self.register[instr[1] as usize];
+                let count2: u8 =  instr.iter().skip(2).sum();
+                self.register[instr[1] as usize] = count + count2;
+                println!("Adds NN to VX")
+            }
+
+            8 => {
+                println!("MOD");
+                match instr[3] {
+                    0 => {
+                        println!("Sets VX to the value of VY.");
+                        self.register[instr[1] as usize] = self.register[instr[2] as usize];
+                    }
+
+                    1 => {
+                        println!("Sets VX to the value of VY.");
+                        self.register[instr[1] as usize] = self.register[instr[2] as usize] | self.register[instr[2] as usize];
+                    }
+
+                    2 => {
+                        println!("Sets VX to the value of VY.");
+                        self.register[instr[1] as usize] = self.register[instr[2] as usize] | self.register[instr[2] as usize];
+                    }
+                    3 => {
+                        println!("Sets VX to the value of VY.");
+                        self.register[instr[1] as usize] = self.register[instr[2] as usize] ^ self.register[instr[2] as usize];
+                    }
+                    4 => {
+                        println!("Sets VX to the value of VY.");
+                        self.register[instr[2] as usize] += self.register[instr[2] as usize];
+                    }
+                    5 => {
+                        println!("Sets VX to the value of VY.");
+                        self.register[instr[2] as usize] -= self.register[instr[2] as usize];
+                    }
+                    6 => {
+                        println!("Sets VX to the value of VY.");
+                        self.register[instr[2] as usize] >>= self.register[instr[2] as usize];
+                    }
+                    7 => {
+                        println!("Sets VX to the value of VY.");
+                        self.register[instr[1] as usize] = self.register[instr[2] as usize] ^ self.register[instr[1] as usize];
+                    }
+                    14 => {
+                        println!("Sets VX to the value of VY.");
+                        self.register[instr[2] as usize] >>= self.register[instr[2] as usize];
+                    } 
+                    _ => {
+                        println!("Else")
+                    }
+                }
+            }
+            
+            9 => {
+                if self.register[instr[1] as usize] != self.register[instr[2] as usize] {
+                    println!("if(Vx!=Vy)");
+                    self.pc += 2;
+                }
+            }
+            
+            10 => {
+                println!("I = NNN");
+                let mem_loc: u8 = instr.iter().skip(1).sum();
+                println!("{}", mem_loc);
+                self.i = self.memory[mem_loc as usize];
+
+            }
+
+            11 => {
+                println!("PC=V0+NNN");
+                let target: u8 = instr.iter().skip(1).sum();
+                let target = target + self.register[0];
+                self.pc = target as usize;
+            }
+            
+            12 => {
+                println!("Vx=rand()&NN")
+            }
+            
+            13 => {
+                println!("draw(Vx,Vy,N)")
+            }
+
+            14 => {
+                match instr[3] {
+                    14 => {
+                        println!("if(key()==Vx)")
+                    }
+
+                    1 => {
+                        println!("if(key()!=Vx)")
+                    }
+                    _ => {
+                        println!("E not implemented!")
+                    }
+                }
+            }
+
+            15 => {
+                match (instr[2], instr[3]) {
+                    (0,7) => {
+                        println!("Vx = get_delay()	")
+                    },
+                    (0,10) => {
+                        println!("Vx = get_key()")
+                    },
+                    (1,5) => {
+                        println!("delay_timer(Vx)")
+                    },
+                    (1,8) => {
+                        println!("sound_timer(Vx)")
+                    },
+                    (1,14) => {
+                        println!("I +=Vx")
+                    },
+                    (2,9) => {
+                        println!("I=sprite_addr[Vx]")
+                    },
+                    (3,3) => {
+                        println!("set_BCD(Vx)")
+                    },
+                    (5,5) => {
+                        println!("reg_dump(Vx,&I)")
+                    },
+                    (6,5) => {
+                        println!("reg_load(Vx,&I)")
+                    }
+                    (_,_) => {
+                        println!("F not implemented!")
+                    }
+                }
+            }
+            _ => {
+                println!("Everything else")
+            }
+
+        }
+        self.pc += 2;
+
+    }
 
 }
-
 
 struct Display {
     x: u8,
@@ -84,6 +340,10 @@ struct Display {
 }
 
 struct Keyboard {
+    hex: u8
+}
+
+struct Sound {
     hex: u8
 }
 

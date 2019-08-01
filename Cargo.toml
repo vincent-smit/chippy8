@@ -7,3 +7,5 @@ edition = "2018"
 [dependencies]
 hex = "0.3.2"
 nom = "5.0.0"
+rand = "0.7.0"
+glium = "0.25.1"

@@ -13,7 +13,6 @@ use std::io::Cursor;
 use std::sync::mpsc::*;
 
 use glium::{Surface};
-use image::{ImageBuffer, RgbImage};
 
 mod cpu;
 
@@ -118,7 +117,7 @@ fn main() {
 
 fn recalculate_screen(display: &glium::Display,
                       texture: &mut glium::texture::texture2d::Texture2d,
-                      datavec: &[u8],
+                      datavec: &Vec<Vec<(u8,u8,u8)>>,
                       renderoptions: &RenderOptions)
 {
 

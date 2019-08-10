@@ -18,7 +18,7 @@ pub struct CPU {
     pub stack: Vec<usize>,
     pub i: u8,
     pub keyboard: Keyboard,
-    pub pixels: Vec<u8>
+    pub pixels: Vec<Vec<(u8,u8,u8)>>,
 }
 
 
@@ -83,7 +83,18 @@ impl CPU {
             keyboard.key.push(0)
         }
 
-        let mut pixels = vec![0; M * N];
+        let mut width = vec![];
+
+        for i in 0..N {
+            width.push((255,255,255));
+        };
+
+        let mut height = vec![];
+
+
+        for i in 0..M {
+            height.push(width.clone());
+        }
 
         CPU {
                 memory : memory,
@@ -95,7 +106,7 @@ impl CPU {
                 stack : stack,
                 i : 0,
                 keyboard: keyboard,
-                pixels: pixels
+                pixels: height
             }
     }
     
@@ -313,14 +324,21 @@ impl CPU {
 
 
                 for line in 0..height {
-                    let draw = self.memory[(self.i + line) as usize];
-                    for i in 0..200 {
+                    let y = line + 1;
+                    for x in 0..120 {
                         //if draw & (0x80 >> i) != 0 {
-                            let mut nr = ((line+x as u8) * (M as u8) + (N as u8 + i));
-                            println!("{}", nr);
-                            self.pixels[((line+x) * (M as u8) + ((N as u8)+ i)) as usize] = 255
+                            self.pixels[x as usize][y as usize] = (255,255,255);
                         //}
                     }
+
+                    self.pixels[101][5] = (255,255,255);
+                    self.pixels[102][5] = (255,255,255);
+                    self.pixels[103][5] = (255,255,255);
+                    self.pixels[104][5] = (255,255,255);
+                    self.pixels[105][5] = (255,255,255);
+                    self.pixels[106][5] = (255,255,255);
+                    self.pixels[107][5] = (255,255,255);
+                    
 
 
                 }

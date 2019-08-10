@@ -6,12 +6,10 @@ extern crate image;
 
 #[allow(unused_imports)]
 use std::fs::File;
-use std::io::prelude::*;
-use std::sync::mpsc::channel;
 use std::thread::*;
-use std::io::Cursor;
 use std::sync::mpsc::*;
-
+use std::env;
+use std::io::Read;
 use glium::{Surface};
 
 mod cpu;
@@ -21,64 +19,62 @@ const HEIGHT: usize = 32;
 
 
 fn main() {
-    println!("Hello, world!");
+    println!("Hello, CHIP8!");
 
-    let filename = r"roms/Fishie.ch8";
-    let mut rom_file = File::open(filename).unwrap();
+    let args: Vec<_> = env::args().collect();
+
+    if args.len() != 2 {
+        panic!("Not enough input parameters!")
+    }
+
+    let mut file = File::open(&args[1]).expect("Could not open rom file..");
+    let fsize = file.metadata().unwrap().len();
+
     let mut binary = Vec::new();
-    rom_file.read_to_end(&mut binary).unwrap();
+    file.read_to_end(&mut binary).expect("Could not read binary in memory...");
+    drop(file);
 
-    let mut cpu = cpu::CPU::new(binary);
+    let mut cpu = cpu::CPU::new(binary, fsize);
     let (mut eventloop, screen, mut texture) = Screen::new();
 
     let renderoptions = RenderOptions {linear_interpolation: true};
 
-    let (sender, receiver) = channel();
+    //let (sender, receiver) = channel();
     let (sender2, receiver2) = sync_channel(1);
+
+    let mut timer  = 0;
+
 
     //TODO: Move rom binary to CPU thread
     let cputhread = spawn(move || {
         loop {
-
-            // return result, if result we pass vec[u8] as data to refresh the screen by passing the instruction to main thread.
-            let opcode = cpu.fetch_opcode().unwrap();
-            let decode_execute = cpu.parse_instruction(opcode);
-
-            // Update timers
-            if cpu.delay_register > 0 {
-                cpu.delay_register -=  1;
-            }
-            
-            if cpu.sound_register > 0 {
-                if cpu.sound_register == 1 {
-                  println!("BEEP!");
-                }
-                cpu.sound_register -= 1;
-            }  
-
-            match decode_execute {
-                Some(gpu_instr) => {
-                    match opcode & 0xF000 {
-                        0xD000 => {
-                            println!("Sending GPU instrutions");
-                            if sender2.send(gpu_instr).is_err() {
-                                break
-                            }
-                        }
-                        _ => {
-                            if sender.send(gpu_instr).is_err() {
-                            //    break
-                            }
-                         }
+            if timer == 2000 {
+                let opcode = cpu.fetch_opcode().unwrap();
+                cpu.parse_instruction(opcode);
+                timer = 0;
+                if cpu.draw_flag == 1 {
+                    if sender2.send(cpu.pixels.clone()).is_err() {
+                        panic!("Could not send pixel data")
                     }
+                }
 
+                // Update timers
+                if cpu.delay_register > 0 {
+                    cpu.delay_register -=  1;
                 }
-                None => {
-                    println!("No GPU instructions");
-                }
+                
+                if cpu.sound_register > 0 {
+                    if cpu.sound_register == 1 {
+                    println!("BEEP!");
+                    }
+                    cpu.sound_register -= 1;
+                } 
+                // Store key press state
+                cpu.draw_flag = 0;
             }
-
-            // Store key press state
+            else {
+                timer += 1;
+            }
         }
     });
 

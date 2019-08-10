@@ -16,8 +16,8 @@ use glium::{Surface};
 
 mod cpu;
 
-const M: usize = 256;
-const N: usize = 256;
+const WIDTH: usize = 64;
+const HEIGHT: usize = 32;
 
 
 fn main() {
@@ -117,7 +117,7 @@ fn main() {
 
 fn recalculate_screen(display: &glium::Display,
                       texture: &mut glium::texture::texture2d::Texture2d,
-                      datavec: &Vec<Vec<(u8,u8,u8)>>,
+                      datavec: &Vec<(u8,u8,u8)>,
                       renderoptions: &RenderOptions)
 {
 
@@ -128,27 +128,21 @@ fn recalculate_screen(display: &glium::Display,
         glium::uniforms::MagnifySamplerFilter::Nearest
     };
 
-    let image = image::load(Cursor::new(&include_bytes!("../roms/opengl.png")[..]),
-                            image::PNG).unwrap().to_rgba();
-    let image_dimensions = image.dimensions();
-
     let rawimage2d = glium::texture::RawImage2d {
         data: std::borrow::Cow::Borrowed(datavec),
-        width: M as u32,
-        height: N as u32,
-        format: glium::texture::ClientFormat::U8,
+        width: WIDTH as u32,
+        height: HEIGHT as u32,
+        format: glium::texture::ClientFormat::U8U8U8
     };
 
-    println!("{:?}", datavec);
-
-    //let image = glium::texture::RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dimensions);
+    //println!("{:?}", datavec);
 
     texture.write(
         glium::Rect {
             left: 0,
             bottom: 0,
-            width: M as u32,
-            height: N as u32
+            width: WIDTH as u32,
+            height: HEIGHT as u32
         },
         rawimage2d);
 
@@ -169,12 +163,6 @@ fn recalculate_screen(display: &glium::Display,
 
 
 
-
-struct Sound {
-    hex: u8
-}
-
-
 #[derive(Default)]
 struct RenderOptions {
     pub linear_interpolation: bool,
@@ -188,17 +176,17 @@ impl Screen {
     fn new() -> (glium::glutin::EventsLoop, glium::backend::glutin::Display, glium::texture::texture2d::Texture2d) {
         let mut eventsloop = glium::glutin::EventsLoop::new();
         let window_builder = glium::glutin::WindowBuilder::new()
-            .with_dimensions(glium::glutin::dpi::LogicalSize::from((M as u32, N as u32)))
+            .with_dimensions(glium::glutin::dpi::LogicalSize::from((WIDTH as u32, HEIGHT as u32)))
             .with_title("Chippy8 - ".to_owned());
         let context_builder = glium::glutin::ContextBuilder::new();
         let display = glium::backend::glutin::Display::new(window_builder, context_builder, &eventsloop).unwrap();
 
-        let mut texture = glium::texture::texture2d::Texture2d::empty_with_format(
+        let texture = glium::texture::texture2d::Texture2d::empty_with_format(
                 &display,
                 glium::texture::UncompressedFloatFormat::U8U8U8,
                 glium::texture::MipmapsOption::NoMipmap,
-                M as u32,
-                N as u32)
+                WIDTH as u32,
+                HEIGHT as u32)
             .unwrap();
         (eventsloop, display, texture)
     }

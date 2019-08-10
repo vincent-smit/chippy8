@@ -1,5 +1,5 @@
-const M: usize = 256;
-const N: usize = 256;
+const WIDTH: usize = 64;
+const HEIGHT: usize = 32;
 
 use rand::Rng;
 use std::convert::TryInto;
@@ -18,7 +18,7 @@ pub struct CPU {
     pub stack: Vec<usize>,
     pub i: u8,
     pub keyboard: Keyboard,
-    pub pixels: Vec<Vec<(u8,u8,u8)>>,
+    pub pixels: Vec<(u8,u8,u8)>,
 }
 
 
@@ -31,26 +31,24 @@ impl CPU {
         let mem_start: u16 = 512;
         let value = 0;
 
-        for i in 0..mem_start {
+        for _i in 0..mem_start {
             memory.push(value.clone());
         }
 
-        for (i, hex) in binary.iter().enumerate() {
+        for (_i, hex) in binary.iter().enumerate() {
             memory.push(hex.clone())
         }
         println!("{:?}", memory);
 
         let mut register = Vec::with_capacity(16);
-        for nr in 0..16 {
-            register.push(nr);
+        for _nr in 0..16 {
+            register.push(0);
         };
         let mut stack = Vec::with_capacity(16);
 
-        for nr in 0..16 {
-            stack.push(nr);
+        for _nr in 0..16 {
+            stack.push(0);
         }
-
-        let mut fontset: Vec<u8> = Vec::new();
 
         let fontset = 
         [
@@ -78,23 +76,14 @@ impl CPU {
         };
 
         let mut keyboard = Keyboard {key: Vec::new()};
-
-        for i in 0..16 {
+        for _i in 0..16 {
             keyboard.key.push(0)
         }
 
-        let mut width = vec![];
-
-        for i in 0..N {
-            width.push((255,255,255));
+        let mut pixels = vec![];
+        for _i in 0..(WIDTH*HEIGHT) {
+            pixels.push((255,255,255));
         };
-
-        let mut height = vec![];
-
-
-        for i in 0..M {
-            height.push(width.clone());
-        }
 
         CPU {
                 memory : memory,
@@ -106,7 +95,7 @@ impl CPU {
                 stack : stack,
                 i : 0,
                 keyboard: keyboard,
-                pixels: height
+                pixels: pixels
             }
     }
     
@@ -117,34 +106,43 @@ impl CPU {
         let opcode: u16 = (left << 8| right) as u16;
 
         println!("Parsing.. {:x} (in hex) / {:b} (in binary)",opcode, opcode);
-        println!("First nibble '{:b}', second nibble '{:b}', third nibble '{:b}', fourth nibble '{:b}'", opcode & 0xFFFF,opcode & 0x0FFF, opcode & 0x00FF, opcode & 0x0F );
-        println!("First nibble '{:x}', second nibble '{:x}', third nibble '{:x}', fourth nibble '{:x}'", opcode & 0xFFFF,opcode & 0x0FFF, opcode & 0x00FF, opcode & 0x0F );
+        println!("First nibble '{:b}', second nibble '{:b}', third nibble '{:b}', fourth nibble '{:b}'", opcode & 0xF000,opcode & 0x0F00, opcode & 0x00F0, opcode & 0x000F);
+        println!("First nibble '{:x}', second nibble '{:x}', third nibble '{:x}', fourth nibble '{:x}'", opcode & 0xF000,opcode & 0x0F00, opcode & 0x00F0, opcode & 0x000F );
 
         Ok(opcode)
     }
 
-    pub fn parse_instruction(&mut self, opcode: u16) -> Option<Vec<u8>> {
+    pub fn parse_instruction(&mut self, opcode: u16) -> Option<Vec<(u8,u8,u8)>> {
 
         println!("{}", opcode & 0xF000);
         match opcode & 0xF000 {
             0x0000 => {
-                match opcode & 0xF {
-                    0 => {
+                match opcode & 0x000F {
+                    0x0000 => {
                         println!("Clear screen");
+                        for xy in 0..WIDTH*HEIGHT {
+                            self.pixels[xy as usize] = (0,0,0);
+                        }   
+                
+                        let grid = self.pixels.clone();
                         self.pc += 2;
-                        Some("clear".to_owned());
+                        return Some(grid);
+                    }
+
+                    0x000E => {
+                        println!("Returns from a subroutine");
+                        self.sp -= 1;
+                        self.pc =  self.stack[self.sp];
+                        self.pc += 2;
                     }
                     _ => {
-                        println!("Returns from a subroutine");
-                        self.pc =  self.stack[self.sp]
+                        println!("Opcode not recorgnized. {}", opcode);
                     }
                 }
             }
 
             0x1000 => {
                 println!("JUMP NNN, e.g. {:x}", (opcode & 0xFFF));
-                //self.stack[self.sp] = self.pc;
-                //self.sp += 1;
                 self.pc = (opcode & 0xFFF) as usize;
             }
 
@@ -156,7 +154,7 @@ impl CPU {
             }
 
             0x3000 => {
-                if self.register[((opcode & 0xF00) >> 8) as usize] == (opcode & 0xFF) as u8 {
+                if self.register[((opcode & 0x0F00) >> 8) as usize] == (opcode & 0x00FF) as u8 {
                     println!("SKIP.EQ");
                     self.pc += 4;
                 }
@@ -167,19 +165,18 @@ impl CPU {
             }
             
             0x4000 => {
-                if self.register[((opcode & 0xF00) >> 8) as usize] != (opcode & 0xFF) as u8 {
+                if self.register[((opcode & 0x0F00) >> 8) as usize] != (opcode & 0x00FF) as u8 {
                     println!("SKIP.NE");
                     self.pc += 4;
                 }
                 else {
                     println!("NOT SKIP.NE");
                     self.pc += 2;
-
                 }
             }
 
             0x5000 => {
-                if self.register[((opcode & 0xF00) >> 8) as usize] == self.register[((opcode & 0xF0) >> 4) as usize] {
+                if self.register[((opcode & 0x0F00) >> 8) as usize] == self.register[((opcode & 0x00F0) >> 4) as usize] {
                     println!("SKIP.EQ");
                     self.pc += 4;
                 }
@@ -190,103 +187,82 @@ impl CPU {
             }
             
             0x6000 => {
-                println!("{}", self.register[((opcode & 0x0F00) >>8) as usize]);
-                self.register[((opcode & 0xF00) >> 8) as usize] = (opcode & 0xFF) as u8;
-                println!("Vx = NN");
+               println!("Vx = NN");
+                self.register[((opcode & 0x0F00) >> 8) as usize] = (opcode & 0x00FF) as u8;
                 self.pc += 2;
             }
 
             0x7000 => {
-                self.register[((opcode & 0xF00) >> 8) as usize] = (opcode & 0xFF) as u8;
                 println!("Adds NN to VX");
+                println!("{}", self.register[((opcode & 0x0F00) >> 8) as usize] );
+                println!("{}", (opcode & 0x00FF) as u8);
+                self.register[((opcode & 0x0F00) >> 8) as usize] = self.register[((opcode & 0x0F00) >> 8) as usize].wrapping_add((opcode & 0x00FF) as u8);
                 self.pc += 2;
-
             }
 
             0x8000 => {
                 self.pc += 2;
-                match opcode & 0xF {
-                    0 => {
+                match opcode & 0x000F {
+                    0x0000 => {
                         println!("Vx=Vy");
-                        self.register[((opcode & 0xF00) >> 8) as usize] = self.register[((opcode & 0xF0) >> 4) as usize];
+                        self.register[((opcode & 0x0F00) >> 8) as usize] = self.register[((opcode & 0x00F0) >> 4) as usize];
                     }
 
-                    1 => {
+                    0x0001 => {
                         println!("Vx=Vx|Vy");
-                        self.register[((opcode & 0xF00) >> 8) as usize] = self.register[((opcode & 0xF00) >> 8) as usize] | self.register[((opcode & 0xF0) >> 4) as usize];
+                        self.register[((opcode & 0x0F00) >> 8) as usize] = self.register[((opcode & 0x0F00) >> 8) as usize] | self.register[((opcode & 0x00F0) >> 4) as usize];
                     }
 
-                    2 => {
+                    0x0002 => {
                         println!("Vx=Vx&Vy");
-                        self.register[((opcode & 0xF00) >> 8) as usize] = self.register[((opcode & 0xF00) >> 8) as usize] & self.register[((opcode & 0xF0) >> 4) as usize];
+                        self.register[((opcode & 0x0F00) >> 8) as usize] = self.register[((opcode & 0x0F00) >> 8) as usize] & self.register[((opcode & 0x00F0) >> 4) as usize];
                     }
-                    3 => {
+                    0x0003 => {
                         println!("Vx=Vx^Vy");
-                        self.register[((opcode & 0xF00) >> 8) as usize] = self.register[((opcode & 0xF00) >> 8) as usize] ^ self.register[((opcode & 0xF0) >> 4) as usize];
+                        self.register[((opcode & 0x0F00) >> 8) as usize] = self.register[((opcode & 0x0F00) >> 8) as usize] ^ self.register[((opcode & 0x00F0) >> 4) as usize];
                     }
                     // TODO: Check 
-                    4 => {
+                    0x0004 => {
                         println!("Vx += Vy");
-                        // 13 > 255-100= 155
-                        if self.register[(opcode & 0x00F0) as usize  >> 4] > (0xFF - self.register[(opcode & 0x0F00) as usize >> 8]) {
-                            self.register[0xF] = 1; //carry
-                        }
-                        else {
-                            self.register[0xF] = 0;
-                            self.register[(opcode & 0x0F00) as usize >> 8] += self.register[(opcode & 0x00F0) as usize >> 4];
-                        }
+                        let (val, ovf) = self.register[((opcode & 0x0F00)  >> 8) as usize].overflowing_add(self.register[((opcode & 0x00F0) >> 4) as usize]);
+                        self.register[((opcode & 0x0F00)  >> 8) as usize] = val;
+                        self.register[0xF] = ovf as u8;
                     }
-                    5 => {
+                    0x0005 => {
                         println!("Vx -= Vy");
-                        if self.register[(opcode & 0x00F0) as usize] >= self.register[(opcode & 0x0F00) as usize] {
-                            self.register[0xF] = 1;
-                        }
-                        else {
-                            self.register[0xF] = 0; //carry
-                        }
-                        let mut result = self.register[(opcode & 0x0F00) as usize] - self.register[(opcode & 0x00F0) as usize];
-                        if result < 0 {
-                            result +=255
-                        };
-                        self.register[(opcode & 0x00F0) as usize] = result;
-
+                        let (val, ovf) = self.register[((opcode & 0x0F00)  >> 8) as usize].overflowing_sub(self.register[((opcode & 0x00F0) >> 4) as usize]);
+                        self.register[((opcode & 0x0F00)  >> 8) as usize] = val;
+                        self.register[0xF] = ovf as u8;
                     }
                     // TODO: Check
-                    6 => {
+                    0x0006 => {
                         println!("{:b}",opcode & 0x0F00 >> 1);
                         println!("Vx>>=1");
-                        self.register[0xF] = self.register[(opcode & 0x0F00) as usize]  >>1
+                        self.register[0xF] = self.register[((opcode & 0x0F00) >>8) as usize] >>1;
+                        self.register[((opcode & 0x0F00) >>8) as usize] >>=1;
                     }
-                    7 => {
-                        println!("Vx=Vy-Vx");
-                        println!("Vx -= Vy");
-                        if self.register[(opcode & 0x0F00) as usize] >= self.register[(opcode & 0x00F0) as usize] {
-                            self.register[0xF] = 1;
-                        }
-                        else {
-                            self.register[0xF] = 0; //carry
-                        }
-                        let mut result = self.register[(opcode & 0x00F0) as usize] - self.register[(opcode & 0x0F00) as usize];
-                        if result < 0 {
-                            result +=255
-                        };
-                        self.register[(opcode & 0x00F0) as usize] = result;
+                    0x007 => {
+                        println!("Vy -= Vx");
+                        let (val, ovf) = self.register[((opcode & 0x00F0)  >> 4) as usize].overflowing_sub(self.register[((opcode & 0x0F00) >> 8) as usize]);
+                        self.register[((opcode & 0x0F0)  >> 4) as usize] = val;
+                        self.register[0xF] = ovf as u8;
                     }
                     // CHECK
-                    14 => {
+                    0x000E => {
                         println!("{:b}",opcode & 0x0F00 << 1);
-                        println!("Vx<<=1");
-                        self.register[0xF] = self.register[(opcode & 0x0F00) as usize]  <<1
+                        println!("Vx<<=1");        
+                        self.register[0xF] = self.register[((opcode & 0x0F00) >>8) as usize] >>7;
+                        self.register[((opcode & 0x0F00) >>8) as usize] <<=1;
                     } 
                     _ => {
-                        println!("Else")
+                        println!("Unknown opcode [0x8000] {:x}", opcode);
                     }
                 }
             }
             
             0x9000 => {
                 println!("if(Vx!=Vy)");
-                if self.register[((opcode & 0xF00) >> 8) as usize] != self.register[((opcode & 0xF0) >> 4) as usize] {
+                if self.register[((opcode & 0x0F00) >> 8) as usize] != self.register[((opcode & 0x00F0) >> 4) as usize] {
                     self.pc += 4;
                 }
                 else {
@@ -296,51 +272,48 @@ impl CPU {
             
             0xA000 => {
                 println!("I = NNN");
-                println!("{:x}",opcode & 0xFFF);
-                self.i = (opcode & 0xFFF) as u8;
+                println!("{:x}",opcode & 0x0FFF);
+                self.i = (opcode & 0x0FFF) as u8;
                 self.pc += 2;
             }
 
             0xB000 => {
                 println!("PC=V0+NNN");
-                let target = (opcode & 0xFFF) as u8 + self.register[0x0];
+                let target = (opcode & 0x0FFF) as u8 + self.register[0x0];
                 self.pc = target as usize;
-                self.pc += 2;
             }
             
             0xC000 => {
-                self.register[((opcode & 0xF00) >> 8) as usize] = (rand::thread_rng().gen_range(0, 255) as u8) & (opcode & 0xFF) as u8;
+                self.register[((opcode & 0x0F00) >> 8) as usize] = (rand::thread_rng().gen_range(0, 255) as u8) & (opcode & 0xFF) as u8;
                 println!("Vx=rand()&NN");
                 self.pc += 2;
             }
             
-            // TODO: Draw sprite
             0xD000 => {
-                println!("draw(Vx,Vy,N)");
-                //self.register[0xF] = 0;
+                println!("draw(Vx,Vy,HEIGHT)");
+                
                 let x = self.register[((opcode & 0x0F00) >> 8) as usize];
                 let y = self.register[((opcode & 0x00F0) >> 4) as usize];
                 let height: u8 = ((opcode & 0x000F)).try_into().unwrap();
 
+                println!("{}",x);
+                println!("{}",y);
+                println!("{}",height);
 
-                for line in 0..height {
-                    let y = line + 1;
-                    for x in 0..120 {
-                        //if draw & (0x80 >> i) != 0 {
-                            self.pixels[x as usize][y as usize] = (255,255,255);
-                        //}
+                for yline in 0..height -1{
+                    let pixel = self.memory[(self.i+yline) as usize];
+                    for xline in 0..7 {
+                        if (pixel & 0x080 >> xline) != 0 {
+                            let location: u16 = ((xline as u16 + x as u16)*(yline as u16 + y as u16)).into();
+                            if self.pixels[location as usize] == (255,255,255) {
+                                self.pixels[location as usize] = (0,0,0);
+                                self.register[0xF] = 1;
+                            }
+                            else {
+                                self.pixels[location as usize] = (255,255,255);
+                            }
+                        }
                     }
-
-                    self.pixels[101][5] = (255,255,255);
-                    self.pixels[102][5] = (255,255,255);
-                    self.pixels[103][5] = (255,255,255);
-                    self.pixels[104][5] = (255,255,255);
-                    self.pixels[105][5] = (255,255,255);
-                    self.pixels[106][5] = (255,255,255);
-                    self.pixels[107][5] = (255,255,255);
-                    
-
-
                 }
                 
                 let grid = self.pixels.clone();
@@ -388,6 +361,11 @@ impl CPU {
                     },
                     (0x000,0x000A) => {
                         println!("Vx = get_key()");
+                        for i in 0..15 {
+                            if self.keyboard.key[i as usize] != 0 {
+                                self.register[((opcode & 0x0F00) >>8) as usize];
+                            }
+                        }
                     },
                     (0x0010,0x0005) => {
                         println!("delay_timer(Vx)");
@@ -396,18 +374,20 @@ impl CPU {
                     (0x0010,0x0008) => {
                         println!("sound_timer(Vx)");
                         self.sound_register = self.register[(opcode & 0x0F00 >> 8) as usize];
-
                     },
                     (0x0010,0x000E) => {
                         println!("I +=Vx, check");
                         println!("{} + {}", self.i, self.register[(opcode & 0x0F00 >> 8) as usize]);
-                        //self.i += self.register[(opcode & 0x0F00 >> 8) as usize];
                     },
                     (0x0020,0x009) => {
-                        println!("I=sprite_addr[Vx]")
+                        println!("I=sprite_addr[Vx]");
+                        self.i = self.register[((opcode & 0x0F00) >>8) as usize] * 0x5;
                     },
                     (0x0030,0x0003) => {
-                        println!("set_BCD(Vx)")
+                        println!("set_BCD(Vx)");
+                        self.memory[(self.i) as usize]     = self.register[((opcode & 0x0F00) >> 8) as usize] / 100;
+					    self.memory[(self.i + 1) as usize] = (self.register[((opcode & 0x0F00) >> 8) as usize] / 10) % 10;
+					    self.memory[(self.i + 2) as usize] = (self.register[((opcode & 0x0F00) >> 8) as usize] % 100) % 10;	
                     },
                     (0x0050,0x0005) => {
                         println!("reg_dump(Vx,&I)");
@@ -416,7 +396,10 @@ impl CPU {
                         }
                     },
                     (0x0060,0x0005) => {
-                        println!("reg_load(Vx,&I)")
+                        println!("reg_load(Vx,&I)");
+                        for i in 0..(opcode & 0x0F00 >>8) {
+                            self.register[i as usize] = self.memory[(self.i + i as u8) as usize];
+                        }
                     }
                     (_,_) => {
                         println!("F not implemented!")

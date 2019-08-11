@@ -4,6 +4,7 @@ const HEIGHT: usize = 32;
 use rand::Rng;
 use std::convert::TryInto;
 
+
 pub struct Keyboard {
     key: Vec<u8>
 }
@@ -107,8 +108,8 @@ impl CPU {
         let opcode: u16 = (left << 8| right) as u16;
 
         println!("Parsing.. {:x} (in hex) / {:b} (in binary)",opcode, opcode);
-        println!("First nibble '{:b}', second nibble '{:b}', third nibble '{:b}', fourth nibble '{:b}'", opcode & 0xF000,opcode & 0x0F00, opcode & 0x00F0, opcode & 0x000F);
-        println!("First nibble '{:x}', second nibble '{:x}', third nibble '{:x}', fourth nibble '{:x}'", opcode & 0xF000,opcode & 0x0F00, opcode & 0x00F0, opcode & 0x000F );
+        //println!("First nibble '{:b}', second nibble '{:b}', third nibble '{:b}', fourth nibble '{:b}'", opcode & 0xF000,opcode & 0x0F00, opcode & 0x00F0, opcode & 0x000F);
+        //println!("First nibble '{:x}', second nibble '{:x}', third nibble '{:x}', fourth nibble '{:x}'", opcode & 0xF000,opcode & 0x0F00, opcode & 0x00F0, opcode & 0x000F );
 
         Ok(opcode)
     }
@@ -130,7 +131,7 @@ impl CPU {
                         println!("Returns from a subroutine");
                         self.sp -= 1;
                         self.pc =  self.stack[self.sp];
-                        self.pc += 2;
+                        //self.pc += 2;
                     }
                     _ => {
                         println!("Opcode not recorgnized. {}", opcode);
@@ -145,7 +146,7 @@ impl CPU {
 
             0x2000 => {
                 println!("Calls subroutine at NNN");
-                self.stack[self.sp] = self.pc;
+                self.stack[self.sp] = self.pc + 2;
                 self.sp += 1;
                 self.pc = (opcode & 0x0FFF) as usize;
             }
@@ -267,7 +268,6 @@ impl CPU {
             
             0xA000 => {
                 println!("I = NNN");
-                println!("{:x}",opcode & 0x0FFF);
                 self.i = (opcode & 0x0FFF) as u8;
                 self.pc += 2;
             }
@@ -344,9 +344,6 @@ impl CPU {
                     }
                 }
             }
-
-            // TODO Check this
-
             0xF000 => {
                 match opcode & 0x00FF {
                     0x0007 => {
@@ -363,9 +360,8 @@ impl CPU {
                                 self.register[((opcode & 0x0F00) >>8) as usize] = i;
                                 key_press = true;
                             }
-
                             if key_press {
-                                self.pc +=2
+                                self.pc +=2;
                             }
                         }
                     },
@@ -400,16 +396,22 @@ impl CPU {
                     },
                     0x0055 => {
                         println!("reg_dump(Vx,&I)");
-                        for i in 0..(self.register[(opcode & 0x0F00 >> 8) as usize]) {
+                        let j = ((opcode & 0x0F00) >> 8) as u8; 
+
+                        for i in 0..j+1 {
                             self.memory[(self.i+i) as usize] = self.register[i as usize];
                         }
+                        self.i = self.i.wrapping_add(j+1).try_into().unwrap();
                         self.pc +=2;
                     },
                     0x0065 => {
                         println!("reg_load(Vx,&I)");
-                        for i in 0..(opcode & 0x0F00 >>8) {
+                        let j = ((opcode & 0x0F00) >> 8) as u8;
+
+                        for i in 0..j+1{
                             self.register[i as usize] = self.memory[(self.i + i as u8) as usize];
                         }
+                        self.i = self.i.wrapping_add(j+1).try_into().unwrap();
                         self.pc +=2;
                     }
                     _ => {

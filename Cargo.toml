@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 hex = "0.3.2"
-nom = "5.0.0"
 rand = "0.7.0"
 glium = "0.25.1"
 image = "0.22.1"
+glutin = "0.21.0"

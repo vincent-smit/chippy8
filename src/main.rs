@@ -10,10 +10,12 @@ use std::thread::*;
 use std::sync::mpsc::*;
 use std::env;
 use std::io::Read;
+use std::time;
 use glium::{Surface};
 use glium::glutin::{Event, WindowEvent, KeyboardInput};
 use glium::glutin::ElementState::{Pressed, Released};
 use glium::glutin::VirtualKeyCode;
+use std::time::Instant;
 
 
 const WIDTH: usize = 64;
@@ -59,57 +61,50 @@ fn main() {
 
     let (sender, receiver) = channel();
     let (sender2, receiver2) = sync_channel(1);
-    let mut timer  = 0;
-
 
     //TODO: Move rom binary to CPU thread
     let cputhread = spawn(move || {
         loop {
-            if timer == 2000 {
-                let opcode = cpu.fetch_opcode().unwrap();
-                cpu.parse_instruction(opcode);
-                timer = 0;
-                if cpu.draw_flag == 1 {
-                    if sender2.send(cpu.pixels.clone()).is_err() {
-                        panic!("Could not send pixel data")
-                    }
+            //println!("Start loooooooop");
+            let opcode = cpu.fetch_opcode().unwrap();
+            cpu.parse_instruction(opcode);
+            if cpu.draw_flag == true {
+                if sender2.send(cpu.pixels.clone()).is_err() {
+                    panic!("Could not send pixel data")
                 }
-
-                // Update timers
-                if cpu.delay_register > 0 {
-                    cpu.delay_register -=  1;
-                }
-                
-                if cpu.sound_register > 0 {
-                    if cpu.sound_register == 1 {
-                    println!("BEEP!");
-                    }
-                    cpu.sound_register -= 1;
-                }
-
-
-                // Store key press state
-                cpu.draw_flag = 0;
             }
-            else {
-                timer += 1;
+
+            // Update timers
+            if cpu.delay_register > 0 {
+                cpu.delay_register -=  1;
             }
+            
+            if cpu.sound_register > 0 {
+                if cpu.sound_register == 1 {
+                println!("BEEP!");
+                }
+                cpu.sound_register -= 1;
+            }
+
+            // Store key press state
+            cpu.draw_flag = false;
+
+
+            sleep(time::Duration::from_millis(16));
 
             'recv: loop {
-            match receiver.try_recv() {
-                Ok(event) => {
-                    match event {
-                        0x1 => println!("Hey"),
-                        0x2 => println!("Cowboy"),
-                        _ =>   println!("Ola") 
-                    }
-                },
-                Err(TryRecvError::Empty) => break 'recv,
-                Err(TryRecvError::Disconnected) => panic!("Howloa"),
+                match receiver.try_recv() {
+                    Ok(event) => {
+                        match event {
+                            0x1 => println!("Hey"),
+                            0x2 => println!("Cowboy"),
+                            _ =>   println!("Ola") 
+                        }
+                    },
+                    Err(TryRecvError::Empty) => break 'recv,
+                    Err(TryRecvError::Disconnected) => panic!("Howloa"),
+                }
             }
-        }
-
-
         }
     });
 
@@ -117,7 +112,6 @@ fn main() {
     let mut stop = false;
     while !stop {
         eventsloop.poll_events(|ev|  {
-            println!("Event!");
             match ev {
                 Event::WindowEvent { event, .. } => 
                     match event {
@@ -156,13 +150,16 @@ fn main() {
             }
         });
 
-        match receiver2.recv() {
+        match receiver2.try_recv() {
             Ok(data) => recalculate_screen(&screen, &mut texture, &data, &renderoptions),
-            Err(..) => break, // Remote end has hung-up
+            Err(TryRecvError::Empty) => {},
+            Err(TryRecvError::Disconnected) => panic!("Other thread disconnected!"),
         }
-    }
+        //sleep(time::Duration::from_millis(16));
 
+    }
     cputhread.join().unwrap();
+    drop(eventsloop);
 }
 
 
